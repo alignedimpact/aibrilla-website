@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="color-scheme" content="light"/>
+  <title>Brilla · Family Portal Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #FEFAF4 !important; color-scheme: light; font-family: 'Nunito', sans-serif; }
+    #root { height: 100%; }
+    button { font-family: 'Nunito', sans-serif; }
+    input, textarea, select { font-family: 'Nunito', sans-serif; }
+    @keyframes bounce {
+      0%,100% { transform: translateY(0); }
+      50% { transform: translateY(-5px); }
+    }
+  </style>
+</head>
+<body>
+<div style="background:#FDF3DC;border-top:3px solid #E9A84C;padding:7px 20px;text-align:center;font-size:12px;color:#C4832A;font-weight:700;font-family:'Nunito',sans-serif;">
+  🎯 Interactive Demo — Responses are illustrative examples, not live AI. Follow the italicized prompts to explore.
+</div>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect, useCallback } = React;
+
+
+const C = {
+  teal: "#2A7A6F", tealMid: "#3D9188", tealPale: "#E8F4F2",
+  amber: "#E9A84C", amberPale: "#FDF3DC", amberDeep: "#C4832A",
+  terra: "#C4604A", terraPale: "#FAEAE6",
+  navy: "#1B3A6B", cream: "#FEFAF4", creamMid: "#FAF3E7",
+  text: "#2C3E38", textMid: "#5A7268", textLt: "#8FA89F",
+};
+
+// ── DATA ──────────────────────────────────────────────────────────────────
+const STUDENT = {
+  name: "Sofia", nickname: "Spidergirl", scholarCode: "A1",
+  grade: 4, school: "Lincoln Elementary", teacher: "Ms. Reyes",
+  lesson: "Module 2, Lesson 6", concept: "Multiplying Two-Digit Numbers · 4.NBT.B.5",
+  streak: 5, sessionsThisWeek: 3,
+};
+
+const BULLETIN = {
+  week: "Week of April 14, 2026",
+  brillianceMoment: {
+    en: "Sofia worked with an area model this week to multiply 24 × 13. She figured out that breaking numbers into tens and ones makes big multiplication problems manageable — and she did it herself. When you make fewer groups, each group gets bigger. That is a key insight about how division works — and she figured it out on her own.",
+    es: "Esta semana Sofía notó algo importante: cuando haces más grupos del mismo total, cada grupo se hace más pequeño. Cuando haces menos grupos, cada grupo se hace más grande. Esa es una idea clave sobre cómo funciona la división — y ella la descubrió por su cuenta.",
+    fr: "Cette semaine Sofia a remarqué quelque chose d'important: quand on fait plus de groupes avec le même total, chaque groupe devient plus petit. Quand on fait moins de groupes, chaque groupe devient plus grand. C'est une idée clé sur la division — et elle l'a découverte elle-même.",
+  },
+  growthNote: {
+    en: "Sofia started by saying she wasn't sure where to begin. By the end of the session she had filled in all four sections of her area model and explained each partial product. That shift in one session is real mathematical growth. That shift from 'I don't understand' to 'I got it' in one session is real mathematical growth.",
+    es: "Sofía comenzó la sesión diciendo que no entendía el problema. Al final había identificado la operación, explicó por qué funcionaba y resolvió un segundo problema de forma independiente. Ese cambio de 'no entiendo' a 'lo logré' en una sola sesión es un crecimiento matemático real.",
+    fr: "Sofia a commencé la session en disant qu'elle ne comprenait pas le problème. À la fin, elle avait identifié l'opération, expliqué pourquoi elle fonctionnait et résolu un deuxième problème de façon autonome. Ce changement de 'je ne comprends pas' à 'j'y suis arrivée' en une seule session est une vraie croissance mathématique.",
+  },
+};
+
+const HOME_ACTIVITY = {
+  title: { en:"Multiplication at Home", es:"Grupos Iguales en Casa", fr:"Groupes Égaux à la Maison" },
+  emoji: "🍎",
+  activity: {
+    en: "Draw a rectangle on a piece of paper and divide it into 4 sections. Label the top 20 and 4. Label the side 10 and 3. Ask Sofia to fill in each section: 20×10, 20×3, 4×10, 4×3. Then add all four sections together. — fruit, crackers, coins, buttons, anything. Ask Sofia to arrange them into equal groups of 3, then 4, then 6. Ask her: which grouping gives the most groups? Why? Let her explain in whichever language helps her think.",
+    es: "Dibujen un rectángulo en un papel y divídanlo en 4 secciones. Pongan 20 y 4 arriba, y 10 y 3 al lado. Pídale a Sofía que llene cada sección: 20×10, 20×3, 4×10, 4×3. Luego sumen las cuatro secciones. — fruta, galletas, monedas, botones, lo que tengan. Pídale a Sofía que los organice en grupos iguales de 3, luego de 4, luego de 6. Pregúntenle: ¿qué agrupación da más grupos? ¿Por qué? Déjenla explicar en el idioma que le ayude a pensar.",
+    fr: "Trouvez 12 petits objets à la maison — des fruits, des crackers, des pièces, des boutons, n'importe quoi. Demandez à Sofia de les organiser en groupes égaux de 3, puis de 4, puis de 6. Demandez-lui: quel groupement donne le plus de groupes? Pourquoi? Laissez-la expliquer dans la langue qui l'aide à réfléchir.",
+  },
+  talkMove: {
+    en: "Before she answers, ask her to show you with her hands first. Watch what she does before she says anything. That physical demonstration often shows more understanding than the words.",
+    es: "Antes de que responda, pídale que lo muestre primero con las manos. Observen lo que hace antes de que diga algo. Esa demostración física a menudo muestra más comprensión que las palabras.",
+    fr: "Avant qu'elle réponde, demandez-lui de montrer d'abord avec ses mains. Regardez ce qu'elle fait avant qu'elle dise quoi que ce soit. Cette démonstration physique montre souvent plus de compréhension que les mots.",
+  },
+};
+
+const NEWSLETTERS = [
+  { id:"N1", type:"lesson",  label:"Module 4, Lesson 18 · Division with Equal Groups", date:"Apr 16", langs:["English","Español","Français"] },
+  { id:"N2", type:"module",  label:"Module 4 Overview · Equal Groups and Division",    date:"Apr 7",  langs:["English","Español"] },
+  { id:"N3", type:"lesson",  label:"Module 3, Lesson 5 · Adding Fractions",            date:"Mar 26", langs:["English","Español","Mandarin"] },
+  { id:"N4", type:"module",  label:"Module 3 Overview · Fractions",                    date:"Mar 10", langs:["English","Español"] },
+  { id:"N5", type:"lesson",  label:"Module 3, Lesson 3 · Comparing Fractions",         date:"Mar 19", langs:["English","Español"] },
+];
+
+const TEXT_PREVIEW = {
+  en: "Hi! This is Brilla from Lincoln Elementary. 🌟 This week Sofia had a breakthrough in math — she figured out the key idea behind division on her own. Ask her to show you with 12 objects from your kitchen tonight. See her full update: brilla.app/family/[link]",
+  es: "¡Hola! Soy Brilla de Lincoln Elementary. 🌟 Esta semana Sofía tuvo un gran avance en matemáticas — descubrió la idea clave de la división por su cuenta. Pídale que se lo muestre con 12 objetos de su cocina esta noche. Vea su actualización completa: brilla.app/family/[link]",
+  fr: "Bonjour! Je suis Brilla de Lincoln Elementary. 🌟 Cette semaine Sofia a fait une percée en maths — elle a découvert l'idée clé de la division par elle-même. Demandez-lui de vous le montrer avec 12 objets de votre cuisine ce soir. Voir sa mise à jour complète: brilla.app/family/[link]",
+};
+
+const LANGS = [
+  { code:"en", label:"English",  flag:"🇺🇸" },
+  { code:"es", label:"Español",  flag:"🇲🇽" },
+  { code:"fr", label:"Français", flag:"🇫🇷" },
+];
+
+// ── MAIN ──────────────────────────────────────────────────────────────────
+function BrillaFamilyPortal() {
+  const [lang, setLang]         = useState("en");
+  const [tab, setTab]           = useState("bulletin");
+  const [mood, setMood]         = useState(null);
+  const [moodSent, setMoodSent] = useState(false);
+  const [showText, setShowText] = useState(false);
+  const [openNewsletter, setOpenNewsletter] = useState(null);
+  const [showLangPicker, setShowLangPicker] = useState(false);
+
+  const L = (obj) => obj[lang] || obj.en;
+
+  const card = (extra={}) => ({
+    background:"#fff",
+    borderRadius:18,
+    border:`1.5px solid ${C.tealPale}`,
+    padding:"20px",
+    marginBottom:14,
+    boxShadow:"0 2px 8px rgba(42,122,111,.06)",
+    ...extra,
+  });
+
+  // ── TEXT PREVIEW MODAL ──────────────────────────────────────────────────
+  const TextModal = () => (
+    <div style={{ position:"fixed", inset:0, background:"rgba(27,58,107,.5)", backdropFilter:"blur(4px)", zIndex:999, display:"flex", alignItems:"flex-end", padding:0 }}
+      onClick={e => { if (e.target===e.currentTarget) setShowText(false); }}>
+      <div style={{ background:C.cream, borderRadius:"22px 22px 0 0", padding:"24px 20px 40px", width:"100%", maxHeight:"85vh", overflowY:"auto" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+          <div style={{ fontSize:18, fontWeight:900, color:C.navy }}>Weekly Text Message</div>
+          <button onClick={() => setShowText(false)} style={{ background:"none", border:"none", fontSize:22, color:C.textLt, cursor:"pointer", padding:4 }}>✕</button>
+        </div>
+
+        {/* Phone mockup */}
+        <div style={{ background:C.navy, borderRadius:18, padding:16, marginBottom:16 }}>
+          <div style={{ background:"#1a1a2e", borderRadius:12, padding:16 }}>
+            <div style={{ fontSize:11, color:"rgba(255,255,255,.5)", marginBottom:8 }}>Messages · Brilla · Now</div>
+            <div style={{ background:"#fff", borderRadius:"4px 16px 16px 16px", padding:"12px 14px" }}>
+              <div style={{ fontSize:15, color:C.text, lineHeight:1.7 }}>{TEXT_PREVIEW[lang]}</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ background:C.amberPale, borderRadius:12, padding:"12px 14px", border:`1px solid ${C.amber}44`, marginBottom:16 }}>
+          <div style={{ fontSize:13, fontWeight:800, color:C.amberDeep, marginBottom:4 }}>ABOUT THIS DEMO</div>
+          <div style={{ fontSize:13, color:C.text, lineHeight:1.6 }}>In the live platform, this text is sent automatically every Tuesday evening in the family's preferred language. The link opens directly to this portal — no login required. SMS delivery uses Twilio on the backend.</div>
+        </div>
+
+        {/* Language switcher for text */}
+        <div style={{ fontSize:14, fontWeight:700, color:C.textMid, marginBottom:10 }}>Preview in another language:</div>
+        <div style={{ display:"flex", gap:8 }}>
+          {LANGS.map(l => (
+            <button key={l.code} onClick={() => setLang(l.code)}
+              style={{ flex:1, padding:"10px 8px", borderRadius:12, border:`2px solid ${lang===l.code?C.teal:"#e0e0e0"}`, background: lang===l.code?C.tealPale:"#fff", color: lang===l.code?C.teal:C.textMid, fontWeight: lang===l.code?800:600, fontSize:14, cursor:"pointer" }}>
+              {l.flag} {l.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── NEWSLETTER MODAL ────────────────────────────────────────────────────
+  const NewsletterModal = ({ n }) => (
+    <div style={{ position:"fixed", inset:0, background:"rgba(27,58,107,.5)", backdropFilter:"blur(4px)", zIndex:999, display:"flex", alignItems:"flex-end" }}
+      onClick={e => { if (e.target===e.currentTarget) setOpenNewsletter(null); }}>
+      <div style={{ background:C.cream, borderRadius:"22px 22px 0 0", padding:"24px 20px 40px", width:"100%", maxHeight:"80vh", overflowY:"auto" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+          <div>
+            <div style={{ fontSize:11, fontWeight:800, color:C.textLt, letterSpacing:.5, textTransform:"uppercase", marginBottom:4 }}>
+              {n.type === "module" ? "Module Newsletter" : "Lesson Newsletter"}
+            </div>
+            <div style={{ fontSize:17, fontWeight:900, color:C.navy }}>{n.label}</div>
+          </div>
+          <button onClick={() => setOpenNewsletter(null)} style={{ background:"none", border:"none", fontSize:22, color:C.textLt, cursor:"pointer", padding:4 }}>✕</button>
+        </div>
+        <div style={{ fontSize:13, color:C.textLt, marginBottom:20 }}>Sent {n.date}</div>
+
+        {/* Language selector */}
+        <div style={{ display:"flex", gap:8, marginBottom:20, flexWrap:"wrap" }}>
+          {n.langs.map(l => (
+            <button key={l}
+              style={{ padding:"8px 16px", borderRadius:22, border:`2px solid ${C.teal}`, background:C.tealPale, color:C.teal, fontWeight:700, fontSize:14, cursor:"pointer" }}>
+              {l}
+            </button>
+          ))}
+        </div>
+
+        {/* Simulated newsletter content */}
+        <div style={{ background:"#fff", borderRadius:14, padding:"20px", border:`1.5px solid ${C.tealPale}` }}>
+          <div style={{ fontSize:16, fontWeight:900, color:C.navy, marginBottom:12 }}>Dear Families,</div>
+          <p style={{ fontSize:15, color:C.text, lineHeight:1.75, marginBottom:12 }}>
+            This week in math we are exploring <strong>{n.label.split("·")[1]?.trim() || "an important concept"}</strong>. Your child will be working with equal groups and division to understand how numbers can be broken apart and shared.
+          </p>
+          <p style={{ fontSize:15, color:C.text, lineHeight:1.75, marginBottom:12 }}>
+            You can support this learning at home by talking about fair sharing. "We have 12 grapes. If we share them equally between 3 people, how many does each person get?" Any everyday situation involving equal sharing connects to what we are learning.
+          </p>
+          <p style={{ fontSize:15, color:C.text, lineHeight:1.75 }}>
+            Thank you for being your child's first and most important teacher.
+          </p>
+          <div style={{ marginTop:16, fontSize:14, fontWeight:700, color:C.teal }}>— {STUDENT.teacher}, Grade {STUDENT.grade}</div>
+        </div>
+
+        <div style={{ background:C.amberPale, borderRadius:12, padding:"12px 14px", border:`1px solid ${C.amber}44`, marginTop:14 }}>
+          <div style={{ fontSize:12, fontWeight:800, color:C.amberDeep, marginBottom:4 }}>ABOUT THIS DEMO</div>
+          <div style={{ fontSize:13, color:C.text, lineHeight:1.6 }}>In the live platform, the full curriculum newsletter uploaded by the Aligned Impact team appears here in the family's preferred language.</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── BULLETIN TAB ────────────────────────────────────────────────────────
+  const BulletinTab = () => (
+    <div style={{ paddingBottom:40 }}>
+
+      {/* Brilliance moment */}
+      <div style={{ background:`linear-gradient(135deg, ${C.teal}, ${C.tealMid})`, borderRadius:20, padding:"22px 20px", marginBottom:14, boxShadow:`0 4px 16px rgba(42,122,111,.25)` }}>
+        <div style={{ fontSize:12, fontWeight:800, color:"rgba(255,255,255,.7)", letterSpacing:1, textTransform:"uppercase", marginBottom:8 }}>
+          🌟 This Week's Brilliance Moment
+        </div>
+        <div style={{ fontSize:17, fontWeight:700, color:"#fff", lineHeight:1.75 }}>
+          {L(BULLETIN.brillianceMoment)}
+        </div>
+      </div>
+
+      {/* Growth note */}
+      <div style={card()}>
+        <div style={{ fontSize:13, fontWeight:800, color:C.teal, letterSpacing:.5, textTransform:"uppercase", marginBottom:10 }}>
+          What We Noticed This Week
+        </div>
+        <p style={{ fontSize:16, color:C.text, lineHeight:1.75, margin:0 }}>
+          {L(BULLETIN.growthNote)}
+        </p>
+      </div>
+
+      {/* Session stats */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
+        <div style={{ background:C.tealPale, borderRadius:16, padding:"18px 16px", textAlign:"center", border:`1.5px solid rgba(42,122,111,.15)` }}>
+          <div style={{ fontSize:32, fontWeight:900, color:C.teal }}>{STUDENT.sessionsThisWeek}</div>
+          <div style={{ fontSize:14, color:C.textMid, marginTop:4, fontWeight:600 }}>
+            {lang==="es" ? "Sesiones esta semana" : lang==="fr" ? "Sessions cette semaine" : "Sessions this week"}
+          </div>
+        </div>
+        <div style={{ background:C.amberPale, borderRadius:16, padding:"18px 16px", textAlign:"center", border:`1.5px solid rgba(233,168,76,.2)` }}>
+          <div style={{ fontSize:32, fontWeight:900, color:C.amberDeep }}>{STUDENT.streak} 🔥</div>
+          <div style={{ fontSize:14, color:C.textMid, marginTop:4, fontWeight:600 }}>
+            {lang==="es" ? "Días seguidos" : lang==="fr" ? "Jours de suite" : "Day streak"}
+          </div>
+        </div>
+      </div>
+
+      {/* Home activity */}
+      <div style={{ ...card(), border:`2px solid ${C.amber}44`, background:C.amberPale }}>
+        <div style={{ display:"flex", gap:10, alignItems:"center", marginBottom:12 }}>
+          <span style={{ fontSize:28 }}>{HOME_ACTIVITY.emoji}</span>
+          <div>
+            <div style={{ fontSize:13, fontWeight:800, color:C.amberDeep, letterSpacing:.5, textTransform:"uppercase" }}>
+              {lang==="es" ? "Actividad en Casa" : lang==="fr" ? "Activité à la Maison" : "Try This at Home"}
+            </div>
+            <div style={{ fontSize:16, fontWeight:800, color:C.navy }}>{L(HOME_ACTIVITY.title)}</div>
+          </div>
+        </div>
+        <p style={{ fontSize:16, color:C.text, lineHeight:1.8, margin:"0 0 14px" }}>
+          {L(HOME_ACTIVITY.activity)}
+        </p>
+        <div style={{ background:"#fff", borderRadius:12, padding:"12px 14px", borderLeft:`3px solid ${C.amber}` }}>
+          <div style={{ fontSize:12, fontWeight:800, color:C.amberDeep, marginBottom:4, letterSpacing:.5, textTransform:"uppercase" }}>
+            {lang==="es" ? "Consejo" : lang==="fr" ? "Conseil" : "Pro Tip"}
+          </div>
+          <div style={{ fontSize:15, color:C.text, lineHeight:1.65 }}>
+            {L(HOME_ACTIVITY.talkMove)}
+          </div>
+        </div>
+      </div>
+
+      {/* How is Sofia feeling */}
+      <div style={card()}>
+        <div style={{ fontSize:15, fontWeight:800, color:C.navy, marginBottom:14 }}>
+          {lang==="es" ? `¿Cómo se siente ${STUDENT.name} sobre matemáticas?` :
+           lang==="fr" ? `Comment ${STUDENT.name} se sent-elle en maths?` :
+           `How is ${STUDENT.name} feeling about math?`}
+        </div>
+
+        {!moodSent ? (
+          <>
+            <div style={{ fontSize:14, color:C.textMid, marginBottom:14, lineHeight:1.6 }}>
+              {lang==="es" ? "Comparta con su maestro cómo se ha sentido su hijo/a esta semana." :
+               lang==="fr" ? "Partagez avec l'enseignant comment votre enfant s'est senti cette semaine." :
+               "Share with the teacher how your child has been feeling about math this week. Only you and Ms. Reyes will see this."}
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:14 }}>
+              {[
+                { v:"great",  en:"Loving it", es:"Le encanta", fr:"Elle adore",   emoji:"😊" },
+                { v:"okay",   en:"It's okay", es:"Está bien",  fr:"Ça va",        emoji:"😐" },
+                { v:"hard",   en:"It's hard", es:"Es difícil", fr:"C'est dur",    emoji:"😕" },
+              ].map(({ v, en, es, fr, emoji }) => (
+                <button key={v} onClick={() => setMood(v)}
+                  style={{ padding:"14px 10px", borderRadius:14, border:`2px solid ${mood===v?C.teal:"#e0e0e0"}`, background: mood===v?C.tealPale:"#fff", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
+                  <span style={{ fontSize:26 }}>{emoji}</span>
+                  <span style={{ fontSize:14, fontWeight: mood===v?800:600, color: mood===v?C.teal:C.textMid }}>
+                    {lang==="es"?es:lang==="fr"?fr:en}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => { if (mood) setMoodSent(true); }}
+              disabled={!mood}
+              style={{ width:"100%", padding:"14px", borderRadius:14, background: mood?C.teal:"#e8e8e8", color: mood?"#fff":C.textLt, border:"none", fontWeight:800, fontSize:16, cursor: mood?"pointer":"not-allowed" }}>
+              {lang==="es" ? "Enviar →" : lang==="fr" ? "Envoyer →" : "Send to Ms. Reyes →"}
+            </button>
+          </>
+        ) : (
+          <div style={{ textAlign:"center", padding:"16px 0" }}>
+            <div style={{ fontSize:28, marginBottom:10 }}>✓</div>
+            <div style={{ fontSize:16, fontWeight:800, color:C.teal, marginBottom:6 }}>
+              {lang==="es" ? "¡Gracias!" : lang==="fr" ? "Merci!" : "Thank you!"}
+            </div>
+            <div style={{ fontSize:15, color:C.textMid, lineHeight:1.65 }}>
+              {lang==="es" ? "Ms. Reyes recibirá su mensaje. Solo ella lo verá." :
+               lang==="fr" ? "Ms. Reyes recevra votre message. Elle seule le verra." :
+               "Ms. Reyes will receive your message. Only she will see it."}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Text preview button */}
+      <button onClick={() => setShowText(true)}
+        style={{ width:"100%", padding:"14px", borderRadius:14, background:C.navyPale||"#E8EFF8", border:`2px solid ${C.navy}22`, color:C.navy, fontWeight:700, fontSize:15, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+        <span>📱</span>
+        <span>{lang==="es" ? "Ver el mensaje de texto semanal" : lang==="fr" ? "Voir le SMS hebdomadaire" : "Preview the weekly text message"}</span>
+      </button>
+    </div>
+  );
+
+  // ── NEWSLETTERS TAB ─────────────────────────────────────────────────────
+  const NewslettersTab = () => (
+    <div style={{ paddingBottom:40 }}>
+      <div style={{ fontSize:16, color:C.textMid, marginBottom:20, lineHeight:1.65 }}>
+        {lang==="es" ? "Todas las cartas del currículo de este año, en orden." :
+         lang==="fr" ? "Toutes les lettres du curriculum de cette année, dans l'ordre." :
+         "All curriculum letters sent home this year, in order."}
+      </div>
+
+      {NEWSLETTERS.map(n => (
+        <button key={n.id} onClick={() => setOpenNewsletter(n)}
+          style={{ ...card({ marginBottom:12, cursor:"pointer", padding:"16px 18px", display:"flex", alignItems:"center", gap:14, width:"100%", textAlign:"left" }) }}>
+          <div style={{ width:44, height:44, borderRadius:12, background: n.type==="module"?C.navy:C.tealPale, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>
+            {n.type==="module" ? "📦" : "📄"}
+          </div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4, flexWrap:"wrap" }}>
+              <span style={{ fontSize:11, fontWeight:800, letterSpacing:.5, textTransform:"uppercase", padding:"2px 8px", borderRadius:20, background: n.type==="module"?C.navyPale||"#E8EFF8":C.tealPale, color: n.type==="module"?C.navy:C.teal }}>
+                {n.type==="module" ? (lang==="es"?"Módulo":lang==="fr"?"Module":"Module") : (lang==="es"?"Lección":lang==="fr"?"Leçon":"Lesson")}
+              </span>
+              <span style={{ fontSize:12, color:C.textLt }}>{n.date}</span>
+            </div>
+            <div style={{ fontSize:15, fontWeight:700, color:C.navy, lineHeight:1.3, marginBottom:6 }}>{n.label}</div>
+            <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+              {n.langs.map(l => (
+                <span key={l} style={{ fontSize:11, fontWeight:600, color:C.textLt, background:"#f5f5f5", padding:"2px 7px", borderRadius:20 }}>{l}</span>
+              ))}
+            </div>
+          </div>
+          <div style={{ fontSize:20, color:C.textLt, flexShrink:0 }}>›</div>
+        </button>
+      ))}
+
+      <div style={{ background:C.amberPale, borderRadius:14, padding:"14px 16px", border:`1px solid ${C.amber}44`, marginTop:8 }}>
+        <div style={{ fontSize:13, fontWeight:800, color:C.amberDeep, marginBottom:4 }}>ABOUT THIS DEMO</div>
+        <div style={{ fontSize:13, color:C.text, lineHeight:1.6 }}>In the live platform, the Aligned Impact team uploads curriculum newsletters for each lesson and module. They appear here automatically in the family's preferred language when deployed by the teacher.</div>
+      </div>
+    </div>
+  );
+
+  // ── ABOUT TAB ───────────────────────────────────────────────────────────
+  const AboutTab = () => (
+    <div style={{ paddingBottom:40 }}>
+      <div style={{ ...card(), background:C.tealPale, border:`2px solid rgba(42,122,111,.15)` }}>
+        <div style={{ fontSize:17, fontWeight:800, color:C.teal, marginBottom:10 }}>
+          {lang==="es" ? "¿Qué es Brilla?" : lang==="fr" ? "Qu'est-ce que Brilla?" : "What is Brilla?"}
+        </div>
+        <p style={{ fontSize:15, color:C.text, lineHeight:1.75, margin:0 }}>
+          {lang==="es"
+            ? "Brilla es una herramienta de matemáticas que ayuda a los estudiantes multilingües a pensar, no solo a responder. Sofía trabaja con Brilla durante la clase de matemáticas. La herramienta nunca le da las respuestas — le hace preguntas que la ayudan a descubrir la respuesta por sí misma."
+            : lang==="fr"
+            ? "Brilla est un outil mathématique qui aide les élèves multilingues à réfléchir, pas seulement à répondre. Sofia travaille avec Brilla pendant le cours de mathématiques. L'outil ne lui donne jamais les réponses — il lui pose des questions qui l'aident à trouver la réponse par elle-même."
+            : "Brilla is a math tool that helps multilingual learners think, not just answer. Sofia works with Brilla during math class. The tool never gives her the answer — it asks her questions that help her discover the answer herself."}
+        </p>
+      </div>
+
+      <div style={card()}>
+        <div style={{ fontSize:17, fontWeight:800, color:C.navy, marginBottom:10 }}>
+          {lang==="es" ? "Su privacidad importa" : lang==="fr" ? "Votre confidentialité compte" : "Your privacy matters"}
+        </div>
+        <p style={{ fontSize:15, color:C.text, lineHeight:1.75, margin:0 }}>
+          {lang==="es"
+            ? "Brilla nunca almacena el nombre real de Sofía. Ella elige un apodo al inicio de cada sesión. Sus conversaciones con Brilla son solo suyas — su maestra ve resúmenes de su progreso, no transcripciones."
+            : lang==="fr"
+            ? "Brilla ne stocke jamais le vrai nom de Sofia. Elle choisit un surnom au début de chaque session. Ses conversations avec Brilla lui appartiennent uniquement — son enseignante voit des résumés de ses progrès, pas des transcriptions."
+            : "Brilla never stores Sofia's real name. She chooses a nickname at the start of each session. Her conversations with Brilla are hers alone — her teacher sees summaries of her progress, not transcripts."}
+        </p>
+      </div>
+
+      <div style={{ ...card(), background:C.creamMid }}>
+        <div style={{ fontSize:15, fontWeight:800, color:C.navy, marginBottom:8 }}>
+          {lang==="es" ? "¿Preguntas?" : lang==="fr" ? "Des questions?" : "Questions?"}
+        </div>
+        <div style={{ fontSize:15, color:C.textMid, lineHeight:1.65 }}>
+          {lang==="es"
+            ? `Comuníquese con ${STUDENT.teacher} a través de la escuela o envíe un correo a hello@aibrilla.com`
+            : lang==="fr"
+            ? `Contactez ${STUDENT.teacher} via l'école ou envoyez un email à hello@aibrilla.com`
+            : `Reach out to ${STUDENT.teacher} through the school or email hello@aibrilla.com`}
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── ROOT ────────────────────────────────────────────────────────────────
+  return (
+    <div style={{ fontFamily:"'Nunito', sans-serif", background:C.cream, minHeight:"100vh", maxWidth:480, margin:"0 auto", display:"flex", flexDirection:"column" }}>
+
+      {/* HEADER */}
+      <div style={{ background:C.navy, padding:"16px 20px 14px", flexShrink:0 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ width:38, height:38, borderRadius:10, background:`linear-gradient(135deg,${C.teal},${C.tealMid})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>🌟</div>
+            <div>
+              <div style={{ fontSize:17, fontWeight:900, color:"#fff" }}>
+                {lang==="es" ? `La Semana de ${STUDENT.name}` : lang==="fr" ? `La Semaine de ${STUDENT.name}` : `${STUDENT.name}'s Week`}
+              </div>
+              <div style={{ fontSize:12, color:"rgba(255,255,255,.6)" }}>{STUDENT.school} · {STUDENT.teacher}</div>
+            </div>
+          </div>
+
+          {/* Language selector */}
+          <div style={{ position:"relative" }}>
+            <button onClick={() => setShowLangPicker(!showLangPicker)}
+              style={{ padding:"8px 14px", borderRadius:22, border:"1.5px solid rgba(255,255,255,.3)", background:"rgba(255,255,255,.1)", color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}>
+              {LANGS.find(l=>l.code===lang)?.flag} {LANGS.find(l=>l.code===lang)?.label}
+            </button>
+            {showLangPicker && (
+              <div style={{ position:"absolute", top:"110%", right:0, background:"#fff", borderRadius:14, boxShadow:"0 4px 20px rgba(0,0,0,.15)", zIndex:100, overflow:"hidden", minWidth:140 }}>
+                {LANGS.map(l => (
+                  <button key={l.code} onClick={() => { setLang(l.code); setShowLangPicker(false); }}
+                    style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 16px", width:"100%", border:"none", background: lang===l.code?C.tealPale:"#fff", color: lang===l.code?C.teal:C.text, fontWeight: lang===l.code?800:500, fontSize:15, cursor:"pointer", borderBottom:`1px solid ${C.tealPale}` }}>
+                    {l.flag} {l.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Lesson context */}
+        <div style={{ background:"rgba(255,255,255,.1)", borderRadius:12, padding:"10px 14px", fontSize:13, color:"rgba(255,255,255,.8)", fontWeight:600 }}>
+          📐 {STUDENT.lesson} · {STUDENT.concept}
+        </div>
+      </div>
+
+      {/* TAB BAR */}
+      <div style={{ background:"#fff", borderBottom:`1.5px solid ${C.tealPale}`, display:"flex", flexShrink:0 }}>
+        {[
+          { id:"bulletin",     en:"This Week",   es:"Esta Semana",  fr:"Cette Semaine", icon:"🌟" },
+          { id:"newsletters",  en:"Letters Home", es:"Cartas",       fr:"Lettres",       icon:"📬" },
+          { id:"about",        en:"About Brilla", es:"Sobre Brilla", fr:"À Propos",      icon:"ℹ️" },
+        ].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            style={{ flex:1, padding:"14px 8px", border:"none", background:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:4, borderBottom:`3px solid ${tab===t.id?C.teal:"transparent"}`, color: tab===t.id?C.teal:C.textLt }}>
+            <span style={{ fontSize:20 }}>{t.icon}</span>
+            <span style={{ fontSize:12, fontWeight: tab===t.id?800:600 }}>
+              {lang==="es"?t.es:lang==="fr"?t.fr:t.en}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* CONTENT */}
+      <div style={{ flex:1, overflowY:"auto", padding:"16px 16px 20px" }}>
+        {/* Week label */}
+        <div style={{ fontSize:13, fontWeight:700, color:C.textLt, marginBottom:16 }}>
+          {BULLETIN.week}
+        </div>
+
+        {tab==="bulletin"    && <BulletinTab/>}
+        {tab==="newsletters" && <NewslettersTab/>}
+        {tab==="about"       && <AboutTab/>}
+      </div>
+
+      {/* PRIVACY FOOTER */}
+      <div style={{ background:"#fff", borderTop:`1.5px solid ${C.tealPale}`, padding:"12px 16px", textAlign:"center", fontSize:12, color:C.textLt, flexShrink:0 }}>
+        🔒 {lang==="es" ? "El nombre real de su hijo/a nunca es almacenado por Brilla." :
+             lang==="fr" ? "Le vrai nom de votre enfant n'est jamais stocké par Brilla." :
+             "Your child's real name is never stored by Brilla."}
+      </div>
+
+      {/* MODALS */}
+      {showText       && <TextModal/>}
+      {openNewsletter && <NewsletterModal n={openNewsletter}/>}
+    </div>
+  );
+}
+
+
+const domRoot = ReactDOM.createRoot(document.getElementById('root'));
+domRoot.render(React.createElement(BrillaFamilyPortal));
+</script>
+</body>
+</html>
