@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="color-scheme" content="light"/>
+  <title>Brilla · Student Agency Portal · Grade 4</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #FEFAF4 !important; color-scheme: light; }
+    #root { height: 100%; }
+    button, input, textarea, select { font-family: 'Nunito', sans-serif; }
+    @keyframes bounce { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-5px); } }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect, useCallback, memo } = React;
+
+
+const C = {
+  teal:"#2A7A6F",tealMid:"#3D9188",tealPale:"#E8F4F2",
+  amber:"#E9A84C",amberPale:"#FDF3DC",amberDeep:"#C4832A",
+  terra:"#C4604A",terraPale:"#FAEAE6",
+  navy:"#1B3A6B",cream:"#FEFAF4",creamMid:"#FAF3E7",
+  text:"#2C3E38",textMid:"#5A7268",textLt:"#8FA89F",
+};
+
+const STUDENT = {
+  scholarCode:"A1",nickname:"Spidergirl",firstName:"Sofia",
+  grade:4,proficiencyLevel:"Expanding",framework:"CA ELD / ELPAC",
+  homeLang:"Spanish",module:2,lesson:6,streak:5,lessonsCompleted:6,
+  sessionHistory:[
+    {lesson:1,mood:"okay",path:"understand"},
+    {lesson:2,mood:"stuck",path:"start"},
+    {lesson:3,mood:"great",path:"stuck"},
+    {lesson:4,mood:"great",path:"stuck"},
+    {lesson:5,mood:"okay",path:"start"},
+    {lesson:6,mood:null,path:null},
+  ],
+};
+
+const PROBLEM = {
+  standard:"4.NBT.B.5",
+  concept:"Multiplying Two-Digit Numbers · Area Model",
+  storyOnly:"Uptown Academy is hosting a school fundraiser. Grade 4 is selling boxes of candles to raise money for their class trip.",
+  full:"Uptown Academy is hosting a school fundraiser. Grade 4 sold 24 boxes of candles. Each box costs $13. How much money did Grade 4 raise altogether?",
+  cognates:[
+    {en:"fundraiser",es:"recaudación de fondos",note:"recaudar = to raise/collect money"},
+    {en:"total / altogether",es:"total / en total",note:"Total is identical in both languages"},
+    {en:"multiply",es:"multiplicar",note:"Very similar — multiplicar"},
+    {en:"product",es:"producto",note:"Same word — producto"},
+  ],
+  vocabulary:[
+    {word:"fundraiser",def:"an event where people sell things to collect money for a cause"},
+    {word:"altogether",def:"the total amount when everything is combined"},
+    {word:"each",def:"every single one — every box costs the same amount"},
+  ],
+  hints:[
+    "Look at your area model. Break 24 into 20+4 and 13 into 10+3. Your rectangle has four sections. Start with the largest one: 20×10.",
+    "20×10=200. 20×3=60. 4×10=40. 4×3=12. Those are your four partial products. Now add them all together.",
+    "200+60+40+12. What is the total? That is how much Grade 4 raised.",
+  ],
+  readyWords:["multiply","area model","decompose","partial product","total","producto","multiplicar","en total"],
+};
+
+// ── MATH PHASES (tools visible) ───────────────────────────────────────────
+const MATH_PHASES = ["building","cfu_wait","cfu_explain","released"];
+const READ_PHASES  = ["read1_intro","read1","read2","read3"];
+const ALL_PHASES_AFTER_CONTEXT = [...READ_PHASES,...MATH_PHASES];
+
+function scrub(t){
+  return t.replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g,"[redacted]")
+          .replace(/\b[A-Z][a-z]{2,} [A-Z][a-z]{2,}\b/g,"[name]");
+}
+
+function isReady(msgs){
+  const mine=msgs.filter(m=>m.from==="student").slice(-4);
+  if(mine.length<2)return false;
+  const combined=mine.map(m=>m.text.toLowerCase()).join(" ");
+  const hits=PROBLEM.readyWords.filter(w=>combined.includes(w.toLowerCase()));
+  return combined.length>50&&hits.length>=2;
+}
+
+function getResponse(raw,spanish,name,phase,count){
+  const t=scrub(raw).toLowerCase();
+
+  if(phase==="context"){
+    const hasCommunity=/yes|sí|si\b|school|escuela|church|iglesia|raised|sold|money|dinero|community|fundraiser|recaudación|vendimos/.test(t);
+    if(hasCommunity)return{text:`${name}, that experience — that is exactly the kind of math we are about to do.\n\nIn Brilla, your thinking in Spanish is just as mathematical as your thinking in English. Always.\n\nNow let's read today's problem together. We are going to read it three times.`,phase:"read1_intro"};
+    return{text:`${name}, that is okay. A fundraiser is when people sell things or do activities to collect money for something they care about.\n\n🇲🇽 En español: recaudación de fondos. "Recaudar" means to collect or raise. "Fondos" means funds.\n\nHave you ever seen something like this — even if you did not know the name for it?`,phase:"context"};
+  }
+
+  if(phase==="read1_intro")return{text:`First read — just the story. The numbers are hidden.\n\nRead it and tell me: What is happening? Who is involved? What are they doing?\n\nNo math yet. Just the story.`,phase:"read1"};
+
+  if(phase==="read1"){
+    if(t.length>15)return{text:`Good, ${name}. You understood the story.\n\nNow the second read — numbers revealed.\n\nWhat are the numbers? What does each one mean in this situation?`,phase:"read2"};
+    return{text:`${name}, just tell me what is happening in the story — in your own words, in English or Spanish.`,phase:"read1"};
+  }
+
+  if(phase==="read2"){
+    if(/24|13|boxes|candles|costs|each|cajas|cada|cuesta/.test(t))return{text:`${name}, you identified the quantities.\n\n📦 24 = the number of boxes Grade 4 sold\n💵 $13 = the cost of each box\n\nNow the third read.\n\nWhat is the problem asking you to find?`,phase:"read3"};
+    return{text:`${name}, look at the numbers. What are they? What does each one mean in the fundraiser story?`,phase:"read2"};
+  }
+
+  if(phase==="read3"){
+    if(/total|altogether|how much|money|raised|cuánto|en total|multiply|multiplicar/.test(t))return{text:`Exactly, ${name}. The question is: how much money did Grade 4 raise altogether?\n\nBefore you start — what operation would you use and why does it make sense here?\n\nYour tools are ready above.`,phase:"building"};
+    return{text:`${name}, read the last sentence one more time. What is it asking you to find?`,phase:"read3"};
+  }
+
+  if(phase==="cfu_wait"){
+    if(/\d/.test(t))return{text:`${name}, walk me through it. What did you fill into each section of the area model? What were your four partial products?`,phase:"cfu_explain"};
+    return{text:`Take your time, ${name}. Solve it in your workbook using the area model. Come back when you have an answer.`,phase:"cfu_wait"};
+  }
+
+  if(phase==="cfu_explain"){
+    if(/(200|60|40|12|312|area model|partial|multiply|decompose|multiplicar|producto)/.test(t))
+      return{text:`${name}, that is clear mathematical reasoning. You decomposed the factors, used the area model to find partial products, and added them together.\n\n✨ You are ready to work through the rest in your workbook. Write your strategy before you go.`,phase:"released",signal:true};
+    return{text:`${name}, tell me about the area model specifically. What did you put in each of the four sections?`,phase:"cfu_explain"};
+  }
+
+  if(/answer|just tell|give me|dime la/.test(t))
+    return{text:spanish?`${name}, la respuesta ya está en tu pensamiento.\n\n¿Qué sabes ya? / What do you already know?`:`${name}, the answer is not mine to give. What do you know for certain right now?`,phase:"building"};
+  if(/no entiendo|no sé|ayuda|como/.test(t))
+    return{text:`${name}, that is mathematical thinking in any language.\n\nrecaudación de fondos = fundraiser · en total = altogether · multiplicar = multiply\n\nEn clase podrías decir: "I know I need to multiply because..."\n\nWhat do you already know about this problem?`,phase:"building"};
+  if(/multiply|multiplication|multiplicar|times|veces/.test(t))
+    return{text:`${name}, multiplication is exactly right — you have equal groups.\n\n24 boxes, each costing the same amount. That is what multiplication finds.\n\nNow look at your area model. Can you decompose 24 and 13 using place value?`,phase:"building"};
+  if(/area model|modelo|decompose|descomponer|partial|parcial/.test(t))
+    return{text:`${name}, you are using the right tool.\n\n24 = 20 + 4\n13 = 10 + 3\n\nYour area model has four sections. Start with the largest: what is 20 × 10?`,phase:"building"};
+  if(/200|20.*10|top.left/.test(t))
+    return{text:`${name}, 200 is correct for the top-left section.\n\nNow the top-right: what is 4 × 10?`,phase:"building"};
+  if(/stuck|confused|don't know|no sé|help/.test(t))
+    return{text:`Being stuck is part of the process, ${name}.\n\nLook at just the top-left section of your area model. It says 20 × 10. What is that?`,phase:"building"};
+
+  const fallbacks=[
+    `${name}, you are thinking. What does that tell you about the next step?`,
+    `Interesting, ${name}. Can you connect that to the area model?`,
+    `${name}, say more. How does that help you find the total?`,
+    `Good thinking, ${name}. What would happen if you tried that with the actual numbers?`,
+    `${name}, what is the very next small step you could take?`,
+  ];
+  return{text:fallbacks[count%fallbacks.length],phase:"building"};
+}
+
+// ── AREA MODEL ────────────────────────────────────────────────────────────
+// Defined OUTSIDE main component — no re-creation on state change
+const AreaModelSVG = memo(function AreaModelSVG({revealed}){
+  const W=320,H=200,col0=160,col1=80,row0=100,row1=60,lpad=44,tpad=36;
+  const cells=[
+    {x:lpad,        y:tpad,       w:col0,h:row0,bg:"#E8EFF8",border:"#1B3A6B",val:"200",label:"20×10",color:"#1B3A6B"},
+    {x:lpad+col0,   y:tpad,       w:col1,h:row0,bg:C.tealPale,border:C.teal,  val:"40", label:"4×10", color:C.teal},
+    {x:lpad,        y:tpad+row0,  w:col0,h:row1,bg:C.tealPale,border:C.teal,  val:"60", label:"20×3", color:C.teal},
+    {x:lpad+col0,   y:tpad+row0,  w:col1,h:row1,bg:C.amberPale,border:C.amberDeep,val:"12",label:"4×3",color:C.amberDeep},
+  ];
+  return(
+    <svg viewBox={`0 0 ${W+lpad} ${H+tpad+24}`} style={{width:"100%",display:"block"}}>
+      <text x={lpad+col0/2} y={20} textAnchor="middle" fontSize="15" fontWeight="800" fill={C.navy}>20</text>
+      <text x={lpad+col0+col1/2} y={20} textAnchor="middle" fontSize="15" fontWeight="800" fill={C.navy}>4</text>
+      <text x={20} y={tpad+row0/2+6} textAnchor="middle" fontSize="15" fontWeight="800" fill={C.navy}>10</text>
+      <text x={20} y={tpad+row0+row1/2+6} textAnchor="middle" fontSize="15" fontWeight="800" fill={C.navy}>3</text>
+      {cells.map(({x,y,w,h,bg,border,val,label,color},i)=>(
+        <g key={i}>
+          <rect x={x} y={y} width={w} height={h} fill={bg} stroke={border} strokeWidth="2" rx="6"/>
+          {revealed?(
+            <>
+              <text x={x+w/2} y={y+h/2-8} textAnchor="middle" fontSize="11" fill={color} fontWeight="700">{label}</text>
+              <text x={x+w/2} y={y+h/2+10} textAnchor="middle" fontSize="20" fill={color} fontWeight="900">{val}</text>
+            </>
+          ):(
+            <text x={x+w/2} y={y+h/2+6} textAnchor="middle" fontSize="22" fill={color} fontWeight="900">?</text>
+          )}
+        </g>
+      ))}
+      {revealed&&(
+        <text x={lpad+(W)/2} y={tpad+H+20} textAnchor="middle" fontSize="14" fontWeight="900" fill={C.navy}>
+          200 + 40 + 60 + 12 = 312
+        </text>
+      )}
+    </svg>
+  );
+});
+
+// ── SKETCHPAD ─────────────────────────────────────────────────────────────
+// Defined OUTSIDE — avoids re-creation
+const Sketchpad = memo(function Sketchpad(){
+  const canvasRef=useRef(null);
+  const [drawing,setDrawing]=useState(false);
+  const [lastPos,setLastPos]=useState(null);
+  const [tool,setTool]=useState("pen");
+  const [color,setColor]=useState(C.teal);
+  const [size,setSize]=useState(3);
+
+  const getPos=useCallback((e,canvas)=>{
+    const rect=canvas.getBoundingClientRect();
+    const cx=e.touches?e.touches[0].clientX:e.clientX;
+    const cy=e.touches?e.touches[0].clientY:e.clientY;
+    return{x:(cx-rect.left)*(canvas.width/rect.width),y:(cy-rect.top)*(canvas.height/rect.height)};
+  },[]);
+  const startDraw=useCallback((e)=>{e.preventDefault();if(!canvasRef.current)return;setDrawing(true);setLastPos(getPos(e,canvasRef.current));},[getPos]);
+  const doDraw=useCallback((e)=>{
+    e.preventDefault();if(!drawing||!canvasRef.current||!lastPos)return;
+    const canvas=canvasRef.current,ctx=canvas.getContext("2d"),pos=getPos(e,canvas);
+    if(tool==="eraser"){ctx.clearRect(pos.x-14,pos.y-14,28,28);}
+    else{ctx.beginPath();ctx.moveTo(lastPos.x,lastPos.y);ctx.lineTo(pos.x,pos.y);ctx.strokeStyle=color;ctx.lineWidth=size;ctx.lineCap="round";ctx.lineJoin="round";ctx.stroke();}
+    setLastPos(pos);
+  },[drawing,lastPos,tool,color,size,getPos]);
+  const endDraw=useCallback((e)=>{e.preventDefault();setDrawing(false);},[]);
+
+  return(
+    <div style={{background:"#fff",borderRadius:16,border:`2px solid ${C.amber}88`,marginBottom:12}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",borderBottom:`1.5px solid ${C.amberPale}`,flexWrap:"wrap",background:C.amberPale,borderRadius:"14px 14px 0 0"}}>
+        <span style={{fontSize:14,fontWeight:800,color:C.amberDeep}}>✏️ Sketchpad</span>
+        {[{id:"pen",label:"Draw"},{id:"eraser",label:"Erase"}].map(({id,label})=>(
+          <button key={id} onClick={()=>setTool(id)} style={{padding:"6px 12px",borderRadius:10,border:`2px solid ${tool===id?C.teal:"#ccc"}`,background:tool===id?C.tealPale:"#fff",color:tool===id?C.teal:C.textMid,fontWeight:700,fontSize:13,cursor:"pointer"}}>{label}</button>
+        ))}
+        <div style={{display:"flex",gap:6}}>{[C.teal,C.navy,C.terra,C.amberDeep,"#444"].map(c=>(
+          <button key={c} onClick={()=>{setColor(c);setTool("pen");}} style={{width:26,height:26,borderRadius:"50%",background:c,border:`3px solid ${color===c?"#fff":"transparent"}`,outline:`2px solid ${color===c?c:"transparent"}`,cursor:"pointer"}}/>
+        ))}</div>
+        <div style={{display:"flex",gap:6}}>{[{s:2,w:16},{s:4,w:22},{s:8,w:28}].map(({s,w})=>(
+          <button key={s} onClick={()=>{setSize(s);setTool("pen");}} style={{width:w,height:w,borderRadius:"50%",background:size===s?color:"#ccc",border:`2px solid ${size===s?color:"#bbb"}`,cursor:"pointer"}}/>
+        ))}</div>
+        <button onClick={()=>{const c=canvasRef.current;if(c)c.getContext("2d").clearRect(0,0,c.width,c.height);}} style={{marginLeft:"auto",padding:"6px 14px",borderRadius:10,border:`2px solid ${C.terra}44`,background:"#fff",color:C.terra,fontWeight:700,fontSize:13,cursor:"pointer"}}>🗑 Clear</button>
+      </div>
+      <canvas ref={canvasRef} width={800} height={260}
+        style={{width:"100%",height:260,display:"block",background:"#fdfcf8",cursor:tool==="eraser"?"cell":"crosshair",touchAction:"none",borderRadius:"0 0 14px 14px"}}
+        onMouseDown={startDraw} onMouseMove={doDraw} onMouseUp={endDraw} onMouseLeave={endDraw}
+        onTouchStart={startDraw} onTouchMove={doDraw} onTouchEnd={endDraw}/>
+      <div style={{padding:"6px 14px 8px",fontSize:12,color:C.textLt}}>🔒 Your drawing is never saved or sent.</div>
+    </div>
+  );
+});
+
+// ── NAV ITEM ──────────────────────────────────────────────────────────────
+function NavItem({icon,label,active,onClick,badge}){
+  return(
+    <button onClick={onClick} style={{display:"flex",alignItems:"center",gap:12,padding:"13px 14px",borderRadius:14,width:"100%",border:"none",cursor:"pointer",textAlign:"left",background:active?C.tealPale:"transparent",color:active?C.teal:C.textMid,position:"relative"}}>
+      <span style={{fontSize:21}}>{icon}</span>
+      <span style={{fontSize:15,fontWeight:active?800:600}}>{label}</span>
+      {badge&&<span style={{marginLeft:"auto",background:C.amber,color:"#fff",fontSize:11,fontWeight:900,padding:"2px 8px",borderRadius:20}}>{badge}</span>}
+      {active&&<div style={{position:"absolute",left:0,top:"20%",bottom:"20%",width:4,borderRadius:"0 4px 4px 0",background:C.teal}}/>}
+    </button>
+  );
+}
+
+// ── DEMO HINT ─────────────────────────────────────────────────────────────
+function DemoHint({text}){
+  return(
+    <div style={{fontSize:12,color:C.textMid,fontStyle:"italic",marginTop:5,padding:"5px 10px",background:C.amberPale,borderRadius:8,border:`1px solid ${C.amber}44`,lineHeight:1.5}}>
+      💡 Demo tip: {text}
+    </div>
+  );
+}
+
+// ── PARTNER SCREEN ────────────────────────────────────────────────────────
+function PartnerScreen({mode,hints,hintIdx,onHint,partnerHint}){
+  const isSmallGroup=mode==="small_group";
+  return(
+    <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px",textAlign:"center"}}>
+      <div style={{fontSize:48,marginBottom:16}}>{isSmallGroup?"👩‍🏫":"🤝"}</div>
+      <div style={{fontSize:22,fontWeight:900,color:C.navy,marginBottom:12}}>{isSmallGroup?"Small Group Time":"Partner Explore Time"}</div>
+      <div style={{fontSize:16,color:C.textMid,lineHeight:1.75,maxWidth:400,marginBottom:24}}>
+        {isSmallGroup?"Your teacher is working with your group right now. Listen and think together.":"Talk to your partner first. What does each of you notice about the problem?"}
+      </div>
+      {!isSmallGroup&&(
+        <>
+          <div style={{background:C.tealPale,borderRadius:16,padding:"16px 20px",border:`2px solid rgba(42,122,111,.15)`,maxWidth:400,marginBottom:16,width:"100%",textAlign:"left"}}>
+            <div style={{fontSize:14,fontWeight:800,color:C.teal,marginBottom:8}}>Partner Talk Frames</div>
+            {["I notice that...","I think we need to...","My partner said... and I think...","We are stuck on...","Yo noto que...","Creo que necesitamos..."].map(f=>(
+              <div key={f} style={{fontSize:14,color:C.text,padding:"5px 0",borderBottom:`1px solid ${C.tealPale}`}}>{f}</div>
+            ))}
+          </div>
+          <button onClick={onHint} disabled={hintIdx>=hints.length}
+            style={{padding:"13px 24px",borderRadius:14,background:hintIdx>=hints.length?"#e8e8e8":C.amber,color:hintIdx>=hints.length?C.textLt:"#fff",border:"none",fontWeight:800,fontSize:15,cursor:hintIdx>=hints.length?"not-allowed":"pointer",marginBottom:8}}>
+            🤝 We need a hint
+          </button>
+          {partnerHint&&(
+            <div style={{background:"#fff",borderRadius:14,padding:"14px 18px",border:`2px solid ${C.amber}66`,maxWidth:400,fontSize:15,color:C.text,lineHeight:1.65,textAlign:"left"}}>
+              💡 {partnerHint}
+            </div>
+          )}
+          <div style={{fontSize:12,color:C.textLt,marginTop:8,fontStyle:"italic"}}>Only tap after talking with your partner first.</div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ══════════════════════════════════════════════════════════════════════════
+function BrillaStudentDashboard(){
+  const [nav,setNav]               = useState("lesson");
+  const [phase,setPhase]           = useState("context");
+  const [msgs,setMsgs]             = useState([]);
+  const [input,setInput]           = useState("");
+  const [typing,setTyping]         = useState(false);
+  const [spanish,setSpanish]       = useState(false);
+  const [showSketch,setShowSketch] = useState(false);
+  const [showFrames,setShowFrames] = useState(false);
+  const [showVocab,setShowVocab]   = useState(false);
+  const [showArea,setShowArea]     = useState(false);
+  const [hintsUsed,setHintsUsed]   = useState(0);
+  const [frame,setFrame]           = useState(null);
+  const [mood,setMood]             = useState(null);
+  const [readyShown,setReadyShown] = useState(false);
+  const [teacherSignal,setTeacherSignal] = useState(false);
+  const [count,setCount]           = useState(0);
+  const [mode,setMode]             = useState("independent");
+  const [partnerHintIdx,setPartnerHintIdx] = useState(0);
+  const [partnerHint,setPartnerHint]       = useState(null);
+  const [showMeta,setShowMeta]     = useState(false);
+  const [metaDone,setMetaDone]     = useState(false);
+  const [areaRevealed,setAreaRevealed] = useState(false);
+  const [listening,setListening]       = useState(false);
+  const [speechSupported]              = useState(typeof window !== "undefined" && ("webkitSpeechRecognition" in window || "SpeechRecognition" in window));
+  const [speechConfidence,setSpeechConfidence] = useState(null);
+  const [transcript,setTranscript]     = useState("");
+
+  const endRef   = useRef(null);
+  const inputRef = useRef(null);
+
+  const FRAMES=[
+    "I notice that...","I think the answer is... because...","I used an area model and found...","The partial products are...","I decomposed the numbers into...","I am stuck on the part where...",
+    ...(spanish?["Yo noto que...","Yo pienso que... porque...","El modelo de área muestra..."]:[] ),
+  ];
+
+  const inMathPhase  = MATH_PHASES.includes(phase);
+  const inReadPhase  = READ_PHASES.includes(phase);
+  const inContextPhase = phase==="context";
+  const numbersVisible = !inContextPhase && phase!=="read1_intro" && phase!=="read1";
+
+  useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth"});},[msgs,typing]);
+
+  // Opening message
+  useEffect(()=>{
+    if(nav==="lesson"&&msgs.length===0){
+      setTimeout(()=>{
+        if(mode==="partner_explore"){
+          setMsgs([{from:"ai",text:`Hi ${STUDENT.nickname}! 🌟\n\nToday you are working with your partner. Before either of you writes anything — take 60 seconds and just talk.\n\nRead the story together. What is happening? What does each of you notice?`}]);
+        } else if(mode==="small_group"){
+          setMsgs([{from:"ai",text:`Hi ${STUDENT.nickname}! 🌟 Your teacher is working with your group today. Listen and think along with everyone.`}]);
+        } else {
+          setMsgs([{from:"ai",text:`Hi ${STUDENT.nickname}! 🌟 Welcome to today's math session.\n\nBefore we look at any numbers, I want to start with something real.\n\nHave you ever been to a fundraiser — or helped raise money at school, at church, or in your neighborhood? What were you raising money for?\n\nTell me in English or Spanish — whichever helps you think.`}]);
+        }
+      },500);
+    }
+  },[nav,mode]);
+
+  // Reveal numbers when advancing past read1
+  const shouldShowNumbers = numbersVisible;
+
+  // Readiness check
+  useEffect(()=>{
+    if(phase!=="building"||readyShown)return;
+    if(msgs.filter(m=>m.from==="student").length<3)return;
+    if(isReady(msgs)){
+      setReadyShown(true);
+      setTimeout(()=>{
+        setTyping(true);
+        setTimeout(()=>{
+          setTyping(false);
+          setPhase("cfu_wait");
+          setMsgs(prev=>[...prev,{from:"ai",text:`${STUDENT.nickname}, I am noticing something.\n\nYou just explained the key mathematical idea. That is real progress.\n\n📝 Now try it on your own in your workbook. Use the area model to solve 24 × 13. Fill in all four sections.\n\nCome back and tell me your answer when you have it.`,special:"transition"}]);
+        },1400);
+      },600);
+    }
+  },[msgs,phase,readyShown]);
+
+  const send = useCallback((override)=>{
+    const text=(override||input).trim();
+    if(!text||typing)return;
+    setInput("");setFrame(null);
+    const newMsg={from:"student",text};
+    setMsgs(prev=>[...prev,newMsg]);
+    setCount(c=>c+1);setTyping(true);
+    // pass current phase via closure — use functional update to get latest
+    setPhase(currentPhase=>{
+      setTimeout(()=>{
+        const res=getResponse(text,spanish,STUDENT.nickname,currentPhase,count);
+        setTyping(false);
+        if(res.phase&&res.phase!==currentPhase)setPhase(res.phase);
+        if(res.signal){setTeacherSignal(true);setTimeout(()=>setShowMeta(true),2000);}
+        setMsgs(prev=>[...prev,{from:"ai",text:res.text,special:res.phase==="released"?"release":null}]);
+      },1300);
+      return currentPhase; // don't change phase here, change it in timeout
+    });
+  },[input,typing,spanish,count]);
+
+  const useHint=useCallback(()=>{
+    if(hintsUsed>=PROBLEM.hints.length||phase==="released")return;
+    setMsgs(prev=>[...prev,{from:"ai",text:`💡 Hint ${hintsUsed+1} of ${PROBLEM.hints.length}:\n\n${PROBLEM.hints[hintsUsed]}`,special:"hint"}]);
+    setHintsUsed(h=>h+1);
+  },[hintsUsed,phase]);
+
+  const handlePartnerHint=useCallback(()=>{
+    if(partnerHintIdx>=PROBLEM.hints.length)return;
+    setPartnerHint(PROBLEM.hints[partnerHintIdx]);
+    setPartnerHintIdx(i=>Math.min(i+1,PROBLEM.hints.length-1));
+  },[partnerHintIdx]);
+
+  const startListening = useCallback(()=>{
+    const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+    if(!SpeechRecognition) return;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = spanish ? "es-ES" : "en-US";
+    setListening(true);
+    setInput("");
+    recognition.onresult = (event)=>{
+      let interim = "";
+      let final = "";
+      for(let i = event.resultIndex; i < event.results.length; i++){
+        if(event.results[i].isFinal){
+          final += event.results[i][0].transcript;
+          setSpeechConfidence(Math.round(event.results[i][0].confidence * 100));
+        } else {
+          interim += event.results[i][0].transcript;
+        }
+      }
+      setInput(final || interim);
+      setTranscript(final || interim);
+    };
+    recognition.onerror = ()=>setListening(false);
+    recognition.onend = ()=>setListening(false);
+    recognition.start();
+  },[spanish]);
+
+  const handleKeyDown=useCallback((e)=>{
+    if(e.key==="Enter")send();
+  },[send]);
+
+  const placeholder = inContextPhase
+    ? "Tell Brilla about a fundraiser you have seen or been part of..."
+    : phase==="read1_intro"||phase==="read1"
+    ? "What is happening in the story? (no math yet)"
+    : phase==="read2"
+    ? "What are the numbers? What does each one mean?"
+    : phase==="read3"
+    ? "What is the problem asking you to find?"
+    : phase==="cfu_wait"
+    ? "Solve in your workbook first, then type your answer..."
+    : spanish?"Escribe en español o inglés...":"Type your thinking here...";
+
+  const demoHintText = inContextPhase
+    ? "Try: 'Yes, my school sold candy bars for a field trip' or 'No sé qué es un fundraiser'"
+    : phase==="read1"||phase==="read1_intro"
+    ? "Try: 'A school is having a fundraiser and Grade 4 is selling candles'"
+    : phase==="read2"
+    ? "Try: '24 is the boxes they sold and 13 is how much each box costs'"
+    : phase==="read3"
+    ? "Try: 'I need to find how much money they raised altogether'"
+    : phase==="cfu_wait"
+    ? "Solve in your workbook. Try typing '312' when you have your answer."
+    : "Try: 'I used the area model. I decomposed 24 into 20 and 4 and got four partial products'";
+
+  // ── GROWTH PAGE ──────────────────────────────────────────────────────
+  const GrowthPage=(
+    <div style={{padding:"22px 18px 32px"}}>
+      <div style={{fontSize:24,fontWeight:900,color:C.navy,marginBottom:6}}>My Growth 🌱</div>
+      <div style={{fontSize:15,color:C.textMid,marginBottom:22}}>Here is what you have been building.</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:18}}>
+        {[{label:"Lessons Done",val:STUDENT.lessonsCompleted,icon:"📚",color:C.teal},{label:"Day Streak",val:`${STUDENT.streak}🔥`,icon:"🔥",color:C.amber},{label:"On My Way",val:"🚀",icon:"",color:C.teal}].map(({label,val,icon,color})=>(
+          <div key={label} style={{background:"#fff",borderRadius:16,padding:"20px 14px",border:`2px solid ${color}22`,textAlign:"center"}}>
+            <div style={{fontSize:28,marginBottom:6}}>{icon}</div>
+            <div style={{fontSize:26,fontWeight:900,color}}>{val}</div>
+            <div style={{fontSize:13,color:C.textMid,marginTop:3}}>{label}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{background:"#fff",borderRadius:16,padding:"20px",border:`2px solid ${C.tealPale}`}}>
+        <div style={{fontSize:16,fontWeight:800,color:C.navy,marginBottom:14}}>My Support Path Over Time</div>
+        <div style={{display:"flex",gap:8,alignItems:"flex-end",height:100,marginBottom:10}}>
+          {STUDENT.sessionHistory.map((s,i)=>{
+            const h=s.path===null?16:s.path==="understand"?30:s.path==="start"?60:100;
+            const bg=s.path===null?"#e8e8e8":s.path==="understand"?C.terra:s.path==="start"?C.amber:C.teal;
+            return(<div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
+              <div style={{width:"100%",height:h,borderRadius:6,background:bg}}/>
+              <div style={{fontSize:12,color:C.textLt,fontWeight:700}}>L{s.lesson}</div>
+            </div>);
+          })}
+        </div>
+        <div style={{background:C.tealPale,borderRadius:10,padding:"12px 14px"}}>
+          <div style={{fontSize:15,fontWeight:700,color:C.teal}}>🌟 Look at how your bar is getting taller. That is your growth.</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── WORDS PAGE ────────────────────────────────────────────────────────
+  const WordsPage=(
+    <div style={{padding:"22px 18px 32px"}}>
+      <div style={{fontSize:24,fontWeight:900,color:C.navy,marginBottom:6}}>My Words 📖</div>
+      <div style={{fontSize:15,color:C.textMid,marginBottom:22}}>Math words and cognates for this unit.</div>
+      {PROBLEM.cognates.map(({en,es,note})=>(
+        <div key={en} style={{background:"#fff",borderRadius:14,padding:"16px 18px",border:`2px solid ${C.tealPale}`,marginBottom:12}}>
+          <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:8}}>
+            <div style={{background:C.tealPale,borderRadius:8,padding:"6px 14px"}}><div style={{fontSize:16,fontWeight:800,color:C.teal}}>{en}</div></div>
+            <div style={{background:C.amberPale,borderRadius:8,padding:"6px 14px"}}><div style={{fontSize:16,fontWeight:800,color:C.amberDeep}}>{es}</div></div>
+          </div>
+          <div style={{fontSize:13,color:C.textMid,fontStyle:"italic"}}>{note}</div>
+        </div>
+      ))}
+      <div style={{background:C.tealPale,borderRadius:14,padding:"14px 18px",border:`1.5px solid rgba(42,122,111,.15)`}}>
+        <div style={{fontSize:14,fontWeight:800,color:C.teal,marginBottom:4}}>🌐 Your home language is a resource</div>
+        <div style={{fontSize:13,color:C.text,lineHeight:1.7}}>Thinking in Spanish first and then bridging to English is a strength. The math is the same in both languages.</div>
+      </div>
+    </div>
+  );
+
+  // ── HOME PAGE ─────────────────────────────────────────────────────────
+  const HomePage=(
+    <div style={{padding:"22px 18px 32px"}}>
+      <div style={{fontSize:24,fontWeight:900,color:C.navy,marginBottom:6}}>Hi {STUDENT.nickname}! 👋</div>
+      <div style={{fontSize:15,color:C.textMid,marginBottom:22}}>Grade {STUDENT.grade} · Scholar {STUDENT.scholarCode} · {STUDENT.framework}: {STUDENT.proficiencyLevel}</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:18}}>
+        <button onClick={()=>setNav("lesson")} style={{background:C.teal,borderRadius:18,padding:"24px 18px",border:"none",cursor:"pointer",textAlign:"left",boxShadow:`0 4px 18px rgba(42,122,111,.3)`}}>
+          <div style={{fontSize:34,marginBottom:8}}>📐</div>
+          <div style={{fontSize:18,fontWeight:900,color:"#fff"}}>Today's Lesson</div>
+          <div style={{fontSize:13,color:"rgba(255,255,255,.8)",marginTop:4}}>4.NBT.B.5 · Multiplication</div>
+          <div style={{marginTop:14,background:"rgba(255,255,255,.2)",borderRadius:8,padding:"8px 12px",display:"inline-block"}}><span style={{fontSize:13,fontWeight:800,color:"#fff"}}>Start Now →</span></div>
+        </button>
+        <button onClick={()=>setNav("growth")} style={{background:C.amberPale,borderRadius:18,padding:"24px 18px",border:`2px solid ${C.amber}44`,cursor:"pointer",textAlign:"left"}}>
+          <div style={{fontSize:34,marginBottom:8}}>🌱</div>
+          <div style={{fontSize:18,fontWeight:900,color:C.navy}}>My Growth</div>
+          <div style={{fontSize:13,color:C.textMid,marginTop:4}}>{STUDENT.lessonsCompleted} lessons · {STUDENT.streak} day streak 🔥</div>
+          <div style={{marginTop:14,background:C.amber,borderRadius:8,padding:"8px 12px",display:"inline-block"}}><span style={{fontSize:13,fontWeight:800,color:"#fff"}}>See Progress →</span></div>
+        </button>
+      </div>
+      <div style={{background:"#fff",borderRadius:16,padding:"18px 20px",border:`2px solid ${C.tealPale}`,marginBottom:12}}>
+        <div style={{fontSize:15,fontWeight:800,color:C.navy,marginBottom:12}}>Recent Sessions</div>
+        {STUDENT.sessionHistory.slice(3).map((s,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 0",borderBottom:i<2?`1px solid ${C.tealPale}`:"none"}}>
+            <div style={{fontSize:15,fontWeight:700,color:C.navy}}>Lesson {s.lesson}</div>
+            <div style={{padding:"5px 14px",borderRadius:20,fontSize:13,fontWeight:700,background:s.path===null?"#e8e8e8":s.path==="understand"?C.terraPale:s.path==="start"?C.amberPale:C.tealPale,color:s.path===null?C.textLt:s.path==="understand"?C.terra:s.path==="start"?C.amberDeep:C.teal}}>
+              {s.path===null?"Today":s.path==="understand"?"I started":s.path==="start"?"Found a start":"Got unstuck ✓"}
+            </div>
+            <div style={{fontSize:20}}>{s.mood==="great"?"😊":s.mood==="okay"?"😐":s.mood==="stuck"?"😕":"📌"}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{background:C.tealPale,borderRadius:14,padding:"14px 18px",border:`1.5px solid rgba(42,122,111,.15)`}}>
+        <div style={{fontSize:14,fontWeight:800,color:C.teal,marginBottom:3}}>🔒 Your workspace is private</div>
+        <div style={{fontSize:13,color:C.textMid}}>Nothing you type in Brilla is saved after your session ends.</div>
+      </div>
+    </div>
+  );
+
+  // ── LESSON PAGE ───────────────────────────────────────────────────────
+  const LessonContent=(
+    <div style={{display:"flex",flexDirection:"column",height:"100%",minHeight:0}}>
+      <div style={{flex:1,overflowY:"auto",padding:"14px 16px 8px"}}>
+
+        {/* Mode = partner/small group */}
+        {(mode==="partner_explore"||mode==="small_group")&&(
+          <PartnerScreen mode={mode} hints={PROBLEM.hints} hintIdx={partnerHintIdx} onHint={handlePartnerHint} partnerHint={partnerHint}/>
+        )}
+
+        {mode==="independent"&&(<>
+
+          {/* Three Reads progress bar — only after context */}
+          {ALL_PHASES_AFTER_CONTEXT.includes(phase)&&(
+            <div style={{display:"flex",gap:6,marginBottom:12}}>
+              {[
+                {label:"1st Read",sub:"The story",   active:["read1_intro","read1"].includes(phase)},
+                {label:"2nd Read",sub:"The numbers",  active:phase==="read2"},
+                {label:"3rd Read",sub:"The question", active:phase==="read3"},
+                {label:"Solve",   sub:"Area model",   active:MATH_PHASES.includes(phase)},
+              ].map(({label,sub,active},i)=>(
+                <div key={i} style={{flex:1,padding:"7px 6px",borderRadius:10,background:active?C.tealPale:"#f5f5f5",border:`1.5px solid ${active?C.teal:"#e0e0e0"}`,textAlign:"center"}}>
+                  <div style={{fontSize:11,fontWeight:800,color:active?C.teal:C.textLt}}>{label}</div>
+                  <div style={{fontSize:10,color:active?C.tealMid:C.textLt}}>{sub}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Problem card — hidden during context */}
+          {ALL_PHASES_AFTER_CONTEXT.includes(phase)&&(
+            <div style={{background:"#fff",borderRadius:16,border:`2px solid ${C.tealPale}`,padding:"16px 18px",marginBottom:12,boxShadow:"0 2px 6px rgba(42,122,111,.06)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                <span style={{fontSize:12,fontWeight:800,color:C.teal,textTransform:"uppercase",letterSpacing:.5}}>{PROBLEM.concept}</span>
+                <span style={{fontSize:11,color:C.textLt}}>{PROBLEM.standard}</span>
+              </div>
+              <div style={{background:C.creamMid,borderRadius:10,padding:"12px 14px",marginBottom:10}}>
+                {!numbersVisible?(
+                  <>
+                    <div style={{fontSize:11,fontWeight:800,color:C.teal,marginBottom:5,textTransform:"uppercase",letterSpacing:.5}}>First Read — Story Only (numbers hidden)</div>
+                    <p style={{fontSize:16,fontWeight:600,color:C.navy,lineHeight:1.75,margin:0}}>{PROBLEM.storyOnly}</p>
+                  </>
+                ):(
+                  <>
+                    <div style={{fontSize:11,fontWeight:800,color:C.teal,marginBottom:5,textTransform:"uppercase",letterSpacing:.5}}>
+                      {phase==="read2"?"Second Read — What are the numbers?":phase==="read3"?"Third Read — What is the question?":"Full Problem"}
+                    </div>
+                    <p style={{fontSize:16,fontWeight:600,color:C.navy,lineHeight:1.75,margin:0}}>{PROBLEM.full}</p>
+                  </>
+                )}
+              </div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {PROBLEM.vocabulary.map(({word})=>(
+                  <span key={word} style={{fontSize:12,fontWeight:700,background:C.amberPale,border:`1px solid ${C.amber}44`,color:C.amberDeep,padding:"3px 10px",borderRadius:20}}>{word}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Area model — only in math phases */}
+          {inMathPhase&&(
+            <div style={{background:C.tealPale,borderRadius:14,padding:"12px 14px",marginBottom:12,border:`1px solid rgba(42,122,111,.15)`}}>
+              <div style={{marginBottom:8}}>
+                <div style={{fontSize:11,fontWeight:800,color:C.teal,textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>Area Model: 24 × 13 — Fill this in your workbook</div>
+                <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                  {[{color:"#1B3A6B",bg:"#E8EFF8",label:"Hundreds (200)"},{color:C.teal,bg:C.tealPale,label:"Tens (40 + 60)"},{color:C.amberDeep,bg:C.amberPale,label:"Ones (12)"}].map(({color,bg,label})=>(
+                    <div key={label} style={{display:"flex",alignItems:"center",gap:4}}>
+                      <div style={{width:12,height:12,borderRadius:3,background:bg,border:`2px solid ${color}`}}/>
+                      <span style={{fontSize:11,color:C.textMid,fontWeight:600}}>{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <AreaModelSVG revealed={phase==="released"}/>
+              <div style={{fontSize:12,color:C.textMid,marginTop:6,fontStyle:"italic"}}>Use this template in your workbook. Fill in each section.</div>
+            </div>
+          )}
+
+          {/* Tools row — only in math phases */}
+          {inMathPhase&&(
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr",gap:8,marginBottom:12}}>
+              {[
+                {id:"sketch",icon:"✏️",label:"Sketchpad",active:showSketch,fn:()=>{setShowSketch(s=>!s);setShowFrames(false);setShowVocab(false);setShowArea(false);}},
+                {id:"frames",icon:"💬",label:"Math Talk", active:showFrames,fn:()=>{setShowFrames(s=>!s);setShowSketch(false);setShowVocab(false);setShowArea(false);}},
+                {id:"vocab", icon:"📖",label:"Words",     active:showVocab, fn:()=>{setShowVocab(s=>!s); setShowSketch(false);setShowFrames(false);setShowArea(false);}},
+                {id:"area",  icon:"📊",label:"Area Model",active:showArea,  fn:()=>{setShowArea(s=>!s);  setShowSketch(false);setShowFrames(false);setShowVocab(false);}},
+              ].map(({id,icon,label,active,fn})=>(
+                <button key={id} onClick={fn} style={{padding:"12px 6px",borderRadius:12,border:`2px solid ${active?C.teal:"#e8e8e8"}`,background:active?C.tealPale:"#fff",color:active?C.teal:C.textMid,fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                  <span style={{fontSize:20}}>{icon}</span>
+                  <span style={{textAlign:"center",lineHeight:1.2}}>{label}</span>
+                </button>
+              ))}
+              <button onClick={useHint} disabled={hintsUsed>=PROBLEM.hints.length||phase==="released"}
+                style={{padding:"12px 6px",borderRadius:12,border:`2px solid ${hintsUsed<PROBLEM.hints.length?C.amber+"88":"#e8e8e8"}`,background:hintsUsed<PROBLEM.hints.length?C.amberPale:"#f5f5f5",color:hintsUsed<PROBLEM.hints.length?C.amberDeep:C.textLt,fontWeight:700,fontSize:12,cursor:hintsUsed<PROBLEM.hints.length&&phase!=="released"?"pointer":"not-allowed",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                <span style={{fontSize:20}}>💡</span>
+                <span>Hint {hintsUsed}/{PROBLEM.hints.length}</span>
+              </button>
+            </div>
+          )}
+
+          {/* Open tools */}
+          {inMathPhase&&showSketch&&<Sketchpad/>}
+          {inMathPhase&&showFrames&&(
+            <div style={{background:"#fff",borderRadius:14,border:`2px solid ${C.amber}66`,padding:"14px 16px",marginBottom:12}}>
+              <div style={{fontSize:15,fontWeight:800,color:C.amberDeep,marginBottom:10}}>💬 Click a frame to use it</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                {FRAMES.map(f=>(
+                  <button key={f} onClick={()=>{setFrame(f);setInput(f);inputRef.current?.focus();}}
+                    style={{padding:"9px 16px",borderRadius:20,border:`2px solid ${frame===f?C.teal:"#e0e0e0"}`,background:frame===f?C.tealPale:"#fff",color:frame===f?C.teal:C.textMid,fontWeight:frame===f?800:500,fontSize:14,cursor:"pointer"}}>{f}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          {inMathPhase&&showVocab&&(
+            <div style={{background:"#fff",borderRadius:14,border:`2px solid ${C.amber}66`,padding:"14px 16px",marginBottom:12}}>
+              <div style={{fontSize:15,fontWeight:800,color:C.amberDeep,marginBottom:8}}>📖 Key words + cognates</div>
+              {PROBLEM.cognates.map(({en,es,note})=>(
+                <div key={en} style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8,paddingBottom:8,borderBottom:`1px solid ${C.tealPale}`}}>
+                  <span style={{background:C.tealPale,borderRadius:6,padding:"3px 10px",fontSize:13,fontWeight:800,color:C.teal,flexShrink:0}}>{en}</span>
+                  <span style={{background:C.amberPale,borderRadius:6,padding:"3px 10px",fontSize:13,fontWeight:800,color:C.amberDeep,flexShrink:0}}>{es}</span>
+                  <span style={{fontSize:12,color:C.textMid,fontStyle:"italic",lineHeight:1.5}}>{note}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {inMathPhase&&showArea&&(
+            <div style={{background:"#fff",borderRadius:14,border:`2px solid ${C.amber}66`,padding:"14px 16px",marginBottom:12}}>
+              <div style={{fontSize:15,fontWeight:800,color:C.amberDeep,marginBottom:8}}>📊 Area Model Reference</div>
+              <AreaModelSVG revealed={areaRevealed||phase==="released"}/>
+              
+            </div>
+          )}
+
+          {/* Chat */}
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>
+            {msgs.length===0&&<div style={{textAlign:"center",padding:"32px 20px",color:C.textLt,fontSize:15}}>Brilla is ready.</div>}
+            {msgs.map((msg,i)=>{
+              // Keep only the last 2 messages fully visible
+              // Everything older collapses to a tiny dot — no scrolling needed
+              const isRecent = i >= msgs.length - 2;
+              if(!isRecent){
+                // Collapsed old message — just a small dot indicator
+                if(msg.from==="ai"&&(i===0||msgs[i-1]?.from!=="ai")){
+                  return(
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:6,padding:"2px 0",opacity:.3}}>
+                      <div style={{width:6,height:6,borderRadius:"50%",background:C.teal,flexShrink:0}}/>
+                      <div style={{fontSize:11,color:C.textLt,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",maxWidth:200}}>{msg.text.split("\n")[0].slice(0,60)}</div>
+                    </div>
+                  );
+                }
+                return null;
+              }
+              return(
+              <div key={i} style={{display:"flex",justifyContent:msg.from==="ai"?"flex-start":"flex-end"}}>
+                <div style={{maxWidth:"84%"}}>
+                  <div style={{fontSize:12,fontWeight:800,marginBottom:4,letterSpacing:.5,color:msg.from==="ai"?C.teal:C.amberDeep}}>
+                    {msg.from==="ai"?"BRILLA":STUDENT.nickname.toUpperCase()}
+                  </div>
+                  <div style={{padding:"14px 18px",borderRadius:msg.from==="ai"?"6px 18px 18px 18px":"18px 6px 18px 18px",
+                    background:msg.special==="release"?C.tealPale:msg.special==="transition"?C.amberPale:msg.special==="hint"?"#fffbef":msg.from==="ai"?"#fff":C.teal,
+                    border:msg.special==="release"?`2px solid ${C.teal}`:msg.special==="transition"?`2px solid ${C.amber}`:msg.special==="hint"?`2px solid ${C.amber}66`:msg.from==="ai"?`1.5px solid ${C.tealPale}`:"none",
+                    color:msg.from==="ai"?C.text:"#fff",fontSize:16,lineHeight:1.75,whiteSpace:"pre-line",
+                    boxShadow:msg.from==="ai"?"0 2px 6px rgba(42,122,111,.07)":"none"}}>
+                    {msg.special==="release"&&<div style={{fontSize:20,marginBottom:6}}>✨</div>}
+                    {msg.special==="transition"&&<div style={{fontSize:20,marginBottom:6}}>📝</div>}
+                    {msg.text}
+                  </div>
+                </div>
+              </div>
+              );
+            })}
+            {typing&&(
+              <div style={{display:"flex"}}>
+                <div style={{padding:"14px 18px",borderRadius:"6px 18px 18px 18px",background:"#fff",border:`1.5px solid ${C.tealPale}`,display:"flex",gap:6}}>
+                  {[0,1,2].map(i=><div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.teal,animation:"bounce 1.2s infinite",animationDelay:`${i*0.2}s`}}/>)}
+                </div>
+              </div>
+            )}
+            <div ref={endRef} style={{paddingBottom:8}}/>
+          </div>
+        </>)}
+      </div>
+
+      {/* Metacognitive prompt */}
+      {showMeta&&!metaDone&&(
+        <div style={{margin:"0 16px 10px",background:C.amberPale,borderRadius:14,padding:"14px 16px",border:`2px solid ${C.amber}44`,flexShrink:0}}>
+          <div style={{fontSize:14,fontWeight:800,color:C.amberDeep,marginBottom:8}}>🧠 Before you go — one quick reflection</div>
+          <p style={{fontSize:13,color:C.text,lineHeight:1.65,marginBottom:10}}>What strategy did you use? Where did you get stuck? What would you try differently next time?</p>
+          <div style={{display:"flex",gap:8}}>
+            <input style={{flex:1,padding:"9px 12px",borderRadius:10,border:`1.5px solid ${C.tealPale}`,fontSize:14,fontFamily:"inherit",outline:"none"}}
+              placeholder="Write your reflection..."/>
+            <button onClick={()=>setMetaDone(true)} style={{padding:"9px 16px",borderRadius:10,background:C.amber,color:"#fff",border:"none",fontWeight:800,fontSize:13,cursor:"pointer"}}>Done ✓</button>
+          </div>
+          <DemoHint text='Try: "I used the area model. I got stuck on the partial products."'/>
+        </div>
+      )}
+
+      {/* Input bar */}
+      {mode==="independent"&&(
+        <div style={{padding:"10px 16px 12px",borderTop:`1.5px solid ${C.tealPale}`,background:C.cream,flexShrink:0}}>
+          {phase==="released"?(
+            <div style={{background:C.tealPale,borderRadius:14,padding:"16px 18px",textAlign:"center",border:`2px solid ${C.teal}`}}>
+              <div style={{fontSize:17,fontWeight:800,color:C.teal,marginBottom:5}}>✓ You are ready for independent work!</div>
+              <p style={{fontSize:14,color:C.textMid,margin:0}}>Go work through the rest in your workbook. Use the area model strategy.</p>
+            </div>
+          ):(
+            <>
+              <div style={{background:"#fff",borderRadius:14,border:`2px solid ${listening?C.terra:C.tealPale}`,display:"flex",alignItems:"center",gap:8,padding:"9px 9px 9px 16px",boxShadow:`0 2px 6px ${listening?"rgba(196,96,74,.15)":"rgba(42,122,111,.06)"}`,transition:"border-color .3s"}}>
+                <input
+                  ref={inputRef}
+                  style={{flex:1,border:"none",outline:"none",fontSize:16,color:C.text,background:"transparent",fontFamily:"'Nunito',sans-serif"}}
+                  placeholder={listening?"Listening... speak now 🎙️":placeholder}
+                  value={input}
+                  onChange={e=>setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  readOnly={listening}
+                />
+                {speechSupported&&(
+                  <button
+                    onClick={startListening}
+                    disabled={listening||typing}
+                    title={spanish?"Hablar en español o inglés":"Speak in English or Spanish"}
+                    style={{width:42,height:42,borderRadius:12,border:`2px solid ${listening?C.terra:C.tealPale}`,background:listening?C.terraPale:"#f9f9f9",color:listening?C.terra:C.textMid,fontSize:20,cursor:listening||typing?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .2s"}}>
+                    {listening?"⏹":"🎙️"}
+                  </button>
+                )}
+                <button
+                  onClick={()=>send()}
+                  disabled={!input.trim()||typing}
+                  style={{padding:"12px 22px",borderRadius:12,background:!input.trim()||typing?"#e8e8e8":C.teal,color:!input.trim()||typing?C.textLt:"#fff",border:"none",fontWeight:800,fontSize:15,cursor:!input.trim()||typing?"not-allowed":"pointer",flexShrink:0}}>
+                  Send →
+                </button>
+              </div>
+              {listening&&(
+                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4,padding:"5px 10px",background:C.terraPale,borderRadius:8,border:`1px solid ${C.terra}44`}}>
+                  <div style={{width:8,height:8,borderRadius:"50%",background:C.terra,animation:"bounce 1s infinite"}}/>
+                  <span style={{fontSize:12,color:C.terra,fontWeight:700}}>Listening in {spanish?"Spanish / English":"English / Spanish"} — tap ⏹ to stop</span>
+                </div>
+              )}
+              {speechConfidence&&!listening&&transcript&&(
+                <div style={{fontSize:11,color:C.textLt,marginTop:3,padding:"0 2px",fontStyle:"italic"}}>
+                  🎙️ Transcribed at {speechConfidence}% confidence — edit above if needed
+                </div>
+              )}
+              <DemoHint text={demoHintText}/>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  // ── ROOT ─────────────────────────────────────────────────────────────
+  return(
+    <div style={{fontFamily:"'Nunito',sans-serif",background:C.cream,minHeight:"100vh",display:"flex",flexDirection:"column"}}>
+
+      {/* DEMO BANNER */}
+      <div style={{background:C.amberPale,borderTop:`3px solid ${C.amber}`,padding:"7px 20px",textAlign:"center",fontSize:12,color:C.amberDeep,fontWeight:700,flexShrink:0}}>
+        🎯 Interactive Demo — Follow the italicized prompts to explore each phase. AI responses are illustrative examples.
+      </div>
+
+      {/* TOP BAR */}
+      <div style={{background:"#fff",borderBottom:`2px solid ${C.tealPale}`,padding:"11px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:"0 2px 6px rgba(42,122,111,.06)",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:44,height:44,borderRadius:"50%",background:`linear-gradient(135deg,${C.teal},${C.tealMid})`,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:900,fontSize:18}}>{STUDENT.nickname[0]}</div>
+          <div>
+            <div style={{fontSize:17,fontWeight:900,color:C.navy}}>{STUDENT.nickname}</div>
+            <div style={{fontSize:12,color:C.textLt}}>Scholar {STUDENT.scholarCode} · Grade {STUDENT.grade} · {STUDENT.proficiencyLevel}</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <div
+            onClick={()=>setMode(m=>m==="independent"?"partner_explore":m==="partner_explore"?"small_group":"independent")}
+            style={{padding:"6px 12px",borderRadius:20,fontSize:12,fontWeight:800,cursor:"pointer",background:mode==="independent"?C.tealPale:mode==="partner_explore"?C.amberPale:"#eef7ee",color:mode==="independent"?C.teal:mode==="partner_explore"?C.amberDeep:"#2d7a2d",border:`1.5px solid ${mode==="independent"?C.teal:mode==="partner_explore"?C.amber:"#2d7a2d"}44`}}
+            title="Demo: click to toggle session mode">
+            {mode==="independent"?"📱 Independent":mode==="partner_explore"?"🤝 Partner Explore":"👩‍🏫 Small Group"}
+          </div>
+          <button onClick={()=>{setSpanish(s=>!s);if(!spanish)setMsgs(prev=>[...prev,{from:"ai",text:`Cambiando a apoyo bilingüe. 🌐\nPuedes escribir en español o en inglés.`}]);}}
+            style={{padding:"8px 16px",borderRadius:20,border:`2px solid ${spanish?C.amber:"#ddd"}`,background:spanish?C.amberPale:"#fff",color:spanish?C.amberDeep:C.textMid,fontWeight:800,fontSize:13,cursor:"pointer"}}>
+            🌐 Español
+          </button>
+          {teacherSignal&&<div style={{padding:"7px 14px",borderRadius:20,background:C.tealPale,border:`2px solid ${C.teal}`,fontSize:13,fontWeight:700,color:C.teal}}>✓ Ms. Reyes knows you are ready</div>}
+        </div>
+      </div>
+
+      {/* BODY */}
+      <div style={{flex:1,display:"flex",minHeight:0}}>
+        {/* LEFT NAV */}
+        <div style={{width:220,background:"#fff",borderRight:`2px solid ${C.tealPale}`,padding:"16px 10px 22px",display:"flex",flexDirection:"column",gap:3,flexShrink:0,overflowY:"auto"}}>
+          <div style={{fontSize:10,fontWeight:900,color:C.textLt,letterSpacing:1,textTransform:"uppercase",padding:"0 8px",marginBottom:8}}>My Dashboard</div>
+          <NavItem icon="🏠" label="Home"           active={nav==="home"}   onClick={()=>setNav("home")}/>
+          <NavItem icon="📐" label="Today's Lesson" active={nav==="lesson"} onClick={()=>setNav("lesson")} badge={phase!=="released"?"!":null}/>
+          <NavItem icon="🌱" label="My Growth"      active={nav==="growth"} onClick={()=>setNav("growth")}/>
+          <NavItem icon="📖" label="My Words"       active={nav==="words"}  onClick={()=>setNav("words")}/>
+          <div style={{flex:1}}/>
+          {/* Mood */}
+          <div style={{borderTop:`1px solid ${C.tealPale}`,paddingTop:12}}>
+            <div style={{fontSize:11,fontWeight:800,color:C.textLt,letterSpacing:.5,textTransform:"uppercase",marginBottom:8,padding:"0 6px"}}>How am I feeling?</div>
+            {[{v:"great",e:"😊",l:"Great"},{v:"okay",e:"😐",l:"Okay"},{v:"stuck",e:"😕",l:"Stuck"}].map(({v,e,l})=>(
+              <button key={v} onClick={()=>setMood(v)}
+                style={{display:"flex",alignItems:"center",gap:10,padding:"11px 10px",borderRadius:10,width:"100%",border:`2px solid ${mood===v?C.teal:"transparent"}`,background:mood===v?C.tealPale:"transparent",color:mood===v?C.teal:C.textMid,fontWeight:mood===v?800:500,fontSize:15,cursor:"pointer",marginBottom:2,textAlign:"left"}}>
+                <span style={{fontSize:20}}>{e}</span>{l}
+              </button>
+            ))}
+            {mood&&<div style={{fontSize:12,color:C.textMid,padding:"3px 8px",fontStyle:"italic"}}>{mood==="great"?"Keep that energy. ✨":mood==="okay"?"You are making progress.":"Being stuck is part of math."}</div>}
+          </div>
+          {/* Support paths — only in math phase, independent mode */}
+          {nav==="lesson"&&inMathPhase&&mode==="independent"&&(
+            <div style={{borderTop:`1px solid ${C.tealPale}`,paddingTop:12}}>
+              <div style={{fontSize:11,fontWeight:800,color:C.textLt,letterSpacing:.5,textTransform:"uppercase",marginBottom:8,padding:"0 6px"}}>Where Am I?</div>
+              {[
+                {emoji:"😕",label:"I don't understand",msg:"I don't understand what this problem is asking me to do",color:C.terra,bg:C.terraPale},
+                {emoji:"🤔",label:"I get it but don't know where to start",msg:"I kind of get it but I don't know where to start",color:C.amber,bg:C.amberPale},
+                {emoji:"💡",label:"I started but got stuck",msg:"I started but I got stuck",color:C.teal,bg:C.tealPale},
+              ].map(({emoji,label,msg,color,bg})=>(
+                <button key={label} onClick={()=>send(msg)} disabled={phase==="released"}
+                  style={{display:"flex",alignItems:"center",gap:8,padding:"12px 10px",borderRadius:12,width:"100%",border:`2px solid ${color}33`,background:bg,color:C.navy,fontWeight:700,fontSize:13,cursor:phase==="released"?"not-allowed":"pointer",marginBottom:6,textAlign:"left",opacity:phase==="released"?.5:1}}>
+                  <span style={{fontSize:22,flexShrink:0}}>{emoji}</span>
+                  <span style={{lineHeight:1.3}}>{label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* MAIN */}
+        <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,overflowY:nav==="lesson"?"hidden":"auto"}}>
+          {nav==="home"   && HomePage}
+          {nav==="lesson" && LessonContent}
+          {nav==="growth" && GrowthPage}
+          {nav==="words"  && WordsPage}
+        </div>
+      </div>
+
+      <style>{`@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}`}</style>
+    </div>
+  );
+}
+
+
+const domRoot = ReactDOM.createRoot(document.getElementById('root'));
+domRoot.render(React.createElement(BrillaStudentDashboard));
+</script>
+</body>
+</html>
